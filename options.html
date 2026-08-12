@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>הגדרות תוסף - PushBox</title>
+  <style>
+    :root {
+      --primary: #1e3a8a; /* כחול עמוק לטקסטים ראשיים */
+      --primary-hover: #1e40af;
+      --bg: #faf5ff; /* סגול עדין מאוד רקע */
+      --surface: #ffffff;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --border: #e9d5ff; /* סגול עדין לגבולות */
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Hebrew, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 40px 20px;
+      direction: rtl;
+      margin: 0;
+    }
+
+    .container {
+      background: var(--surface);
+      padding: 30px;
+      border-radius: var(--radius);
+      max-width: 460px;
+      margin: 0 auto;
+      box-shadow: 0 10px 25px -5px rgba(107, 33, 168, 0.05), 0 8px 10px -6px rgba(107, 33, 168, 0.02);
+      border: 1px solid var(--border);
+    }
+
+    /* עיצוב ההדר לדף ההגדרות */
+    .header {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      margin-bottom: 24px;
+      border-bottom: 2px solid var(--bg);
+      padding-bottom: 14px;
+    }
+
+    .header-logo {
+      text-align: right;
+    }
+
+    .header-title {
+      text-align: center;
+      margin: 0;
+      color: var(--primary);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    /* עיצוב לבאנר עדכון גרסה (חדש!) */
+    .update-banner {
+      display: none; /* מוסתר כברירת מחדל */
+      background-color: #eff6ff; 
+      border: 1px solid #bfdbfe; 
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .update-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--primary); 
+      margin: 0 0 4px 0;
+    }
+
+    .update-subtitle {
+      font-size: 13px;
+      color: #334155;
+      margin: 0 0 12px 0;
+    }
+
+    .update-btn {
+      background-color: var(--primary); 
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+    }
+
+    .update-btn:hover {
+      background-color: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(30, 58, 138, 0.3);
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #334155;
+      font-size: 14px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 11px 14px;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      background-color: #faf5ff;
+      color: var(--text);
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: #c084fc;
+      background-color: #fff;
+      box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.15);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    button {
+      flex: 1;
+      border: none;
+      padding: 11px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    /* כל הכפתורים בסגול עדין זהה */
+    .btn-secondary {
+      background: #f3e8ff;
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: #e9d5ff;
+      color: #1e3a8a;
+    }
+
+    #status {
+      margin-top: 16px;
+      font-size: 13px;
+      text-align: center;
+      font-weight: 600;
+      min-height: 20px;
+      padding: 8px;
+      border-radius: 6px;
+      display: none;
+    }
+
+    /* איחוד כל הודעות המערכת לעיצוב סגול בהיר אחיד */
+    .status-success, 
+    .status-info, 
+    .status-error {
+      display: block !important;
+      color: #581c87; /* טקסט סגול כהה וקריא */
+      background-color: #f3e8ff; /* רקע סגול בהיר */
+      border: 1px solid #d8b4fe;
+    }
+
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+
+    .footer a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .email-copy {
+      color: var(--primary);
+      font-weight: bold;
+      cursor: pointer;
+      direction: ltr;
+      display: inline-block;
+    }
+
+    .email-copy:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    
+    <!-- שורת כותרת: לוגו בימין, כותרת באמצע -->
+    <div class="header">
+      <div class="header-logo">
+        <img src="icon48.png" alt="לוגו" style="width: 26px; height: 26px; object-fit: contain; vertical-align: middle;">
+      </div>
+      <h2 class="header-title">PushBox</h2>
+      <div></div>
+    </div>
+
+    <!-- תיבת עדכון גרסה (חדש!) -->
+    <div id="updateBanner" class="update-banner">
+      <div class="update-title">מזל טוב!</div>
+      <div class="update-subtitle">לPushBox יש גרסה חדשה</div>
+      <a href="#" id="updateLink" target="_blank" class="update-btn">להורדה לחץ כאן</a>
+    </div>
+    
+    <div class="form-group">
+      <label for="token">טוקן התחברות (Token):</label>
+      <input type="text" id="token" placeholder="הכנס טוקן מערכת כאן">
+    </div>
+
+    <div class="form-group">
+      <label for="phoneNumber">מספר הטלפון של המערכת:</label>
+      <input type="text" id="phoneNumber" placeholder="לדוגמה: 0771234567">
+    </div>
+    
+    <div class="form-group">
+      <label for="interval">תדירות בדיקה אוטומטית ברקע:</label>
+      <select id="interval">
+        <option value="0">ללא בדיקה אוטומטית (ידני בלבד)</option>
+        <option value="1">כל דקה</option>
+        <option value="5">כל 5 דקות</option>
+        <option value="15">כל 15 דקות</option>
+        <option value="30">כל 30 דקות</option>
+      </select>
+    </div>
+    
+    <div class="btn-group">
+      <button id="verifyToken" class="btn-secondary">🛡️ אמת טוקן</button>
+      <button id="save" class="btn-secondary">💾 שמור</button>
+      <button id="resendNow" class="btn-secondary">🔔 שלח מחדש</button>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="footer">
+      <div>כל הזכויות שמורות</div>
+      <div><a href="https://github.com/Tzadikvtovlo" target="_blank">צדיק וטוב לו</a></div>
+      <div><span class="email-copy" id="copyEmail" title="לחץ להעתקת המייל ללוח">q9411aa@gmail.com</span></div>
+    </div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>הודעות SMS - ימות המשיח</title>
+  <style>
+    :root {
+      --primary: #1e3a8a; /* כחול עמוק */
+      --primary-hover: #1e40af;
+      --bg: #faf5ff; /* סגול עדין מאוד לרקע */
+      --surface: #ffffff;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --border: #e9d5ff; /* סגול עדין לגבולות */
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Hebrew, sans-serif;
+      width: 380px;
+      margin: 0;
+      padding: 14px;
+      background: var(--bg);
+      color: var(--text);
+      direction: rtl;
+    }
+
+    /* עיצוב ההדר החדש */
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .top-bar {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      width: 100%;
+    }
+
+    .logo-container {
+      text-align: right;
+    }
+
+    .app-icon {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      vertical-align: middle;
+    }
+
+    .app-title {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: 0.5px;
+    }
+
+    .system-phone-container {
+      text-align: left;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    #systemPhone {
+      direction: ltr;
+      display: inline-block;
+    }
+
+    .action-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      flex: 1;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 4px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .icon-btn:hover {
+      background: #f3e8ff;
+      color: var(--primary);
+      border-color: #d8b4fe;
+    }
+
+    .spinning {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(-360deg); }
+    }
+
+    /* עיצוב לבאנר עדכון גרסה (חדש!) */
+    .update-banner {
+      display: none; /* מוסתר כברירת מחדל */
+      background-color: #eff6ff; 
+      border: 1px solid #bfdbfe; 
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .update-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--primary); 
+      margin: 0 0 4px 0;
+    }
+
+    .update-subtitle {
+      font-size: 13px;
+      color: #334155;
+      margin: 0 0 12px 0;
+    }
+
+    .update-btn {
+      background-color: var(--primary); 
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+    }
+
+    .update-btn:hover {
+      background-color: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(30, 58, 138, 0.3);
+    }
+
+    /* שאר העיצוב המקורי של ההודעות */
+    #messagesList {
+      max-height: 430px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    #messagesList::-webkit-scrollbar {
+      width: 5px;
+    }
+    #messagesList::-webkit-scrollbar-thumb {
+      background: #d8b4fe;
+      border-radius: 4px;
+    }
+
+    .msg-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: var(--radius);
+      box-shadow: 0 1px 3px rgba(107, 33, 168, 0.04);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .msg-card:hover {
+      box-shadow: 0 4px 12px rgba(107, 33, 168, 0.08);
+    }
+
+    .msg-header {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .msg-source {
+      background: #f3e8ff;
+      color: var(--primary);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 11px;
+    }
+
+    .msg-date {
+      font-size: 11px;
+    }
+
+    .msg-body {
+      font-size: 13px;
+      color: var(--text);
+      word-break: break-word;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    .highlight-code {
+      background: #f3e8ff;
+      color: #6b21a8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-copy {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      width: 100%;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-copy:hover {
+      background: var(--primary-hover);
+      box-shadow: 0 2px 6px rgba(30, 58, 138, 0.2);
+    }
+
+    .btn-copy.secondary {
+      background: #f3e8ff;
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-copy.secondary:hover {
+      background: #e9d5ff;
+      color: #1e3a8a;
+    }
+
+    .loading, .error, .empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 30px 15px;
+      font-size: 13px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px dashed var(--border);
+    }
+
+    .error {
+      color: #ef4444;
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    
+    <!-- שורה 1: לוגו (ימין), כותרת (אמצע), פרטי מערכת (שמאל) -->
+    <div class="top-bar">
+      <div class="logo-container">
+        <img src="icon48.png" alt="לוגו" class="app-icon">
+      </div>
+      <div class="app-title">PushBox</div>
+      <div class="system-phone-container">
+        <span id="systemPhone"></span>
+      </div>
+    </div>
+
+    <!-- שורה 2: כפתורי פעולה -->
+    <div class="action-bar">
+      <a href="options.html" target="_blank" class="icon-btn" title="הגדרות">
+        ⚙️ הגדרות
+      </a>
+      <button id="refreshBtn" class="icon-btn" title="רענן הודעות">
+        <span id="refreshIcon">🔄</span> רענן
+      </button>
+      <button id="resendBtn" class="icon-btn" title="שלח התראת דחיפה להודעה האחרונה">
+        🔔 שלח מחדש
+      </button>
+    </div>
+
+  </div>
+
+  <!-- תיבת עדכון גרסה (חדש!) -->
+  <div id="updateBanner" class="update-banner">
+    <div class="update-title">מזל טוב!</div>
+    <div class="update-subtitle">לPushBox יש גרסה חדשה</div>
+    <a href="#" id="updateLink" target="_blank" class="update-btn">להורדה לחץ כאן</a>
+  </div>
+
+  <div id="messagesList">
+    <div class="loading">טוען הודעות...</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
