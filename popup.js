@@ -68,13 +68,43 @@ async function fetchMessages() {
             body.className = 'msg-body';
             
             let text = escapeHtml(msg.message || '');
-            const codeRegex = /\b(\d{5,8})\b/g;
             let extractedCode = null;
-            
+
+            // --- חדש: מחיקת שורות ריקות (צמצום רצף מעברי שורה למעבר יחיד) ---
+            // חותך גם רווחים מיותרים בתחילת ובסוף ההודעה
+            text = text.replace(/[\r\n]+/g, '\n').trim();
+
+            // 1. זיהוי קישורים רחב - תופס גם קישורים כמו bit.ly/xxx, ynet.co.il וכו'
+            const urlRegex = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{2,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/gi;
+            const links = [];
+            text = text.replace(urlRegex, (url) => {
+              links.push(url);
+              return `__URL_${links.length - 1}__`;
+            });
+
+            // 2. זיהוי קוד אימות
+            const codeRegex = /\b(\d{5,8})\b/g;
             text = text.replace(codeRegex, (match) => {
-              extractedCode = match;
+              if (!extractedCode) extractedCode = match;
               return `<span class="highlight-code">${match}</span>`;
             });
+
+            // 3. החזרת הקישורים כאלמנטים לחיצים בצורה בטוחה
+            text = text.replace(/__URL_(\d+)__/g, (match, index) => {
+              const url = links[index];
+              let cleanUrl = url.replace(/&amp;/g, '&');
+              
+              // הוספת פרוטוקול במידה וחסר, הכרחי כדי שהדפדפן ידע לצאת מחוץ לתוסף
+              let href = cleanUrl;
+              if (!href.match(/^https?:\/\//i)) {
+                href = 'https://' + href;
+              }
+              
+              return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: bold; direction: ltr; display: inline-block;">${url}</a>`;
+            });
+
+            // --- חדש: המרת מעברי השורה לתגיות HTML כדי שיוצגו בפופ-אפ ---
+            text = text.replace(/\n/g, '<br>');
 
             body.innerHTML = text;
             card.appendChild(body);
@@ -124,6 +154,7 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
 // --- בלוק חדש: בדיקת עדכונים לתצוגת הבאנר ---
 document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.local.get(['updateAvailable', 'updateUrl'], (data) => {
