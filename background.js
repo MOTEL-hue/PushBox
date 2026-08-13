@@ -73,6 +73,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+// פונקציית עזר להצגת ההתראה בהתאם ללוגיקה המבוקשת
+function showSmsNotification(latestMsg) {
+  const codeMatch = latestMsg.message.match(/\b\d{5,8}\b/);
+  const codeText = codeMatch ? codeMatch[0] : null;
+  const systemName = latestMsg.source || 'מערכת';
+
+  let notifTitle = '';
+  let notifMessage = '';
+
+  if (codeText) {
+    notifTitle = `התקבל קוד חדש מ ${systemName}`;
+    notifMessage = `${latestMsg.message}\n \n \n code is ${codeText}`;
+  } else {
+    notifTitle = `התקבל SMS חדש מ ${systemName}`;
+    notifMessage = latestMsg.message;
+  }
+
+  // יצירת מזהה ייחודי כדי לאפשר שליחה מחדש של אותה הודעה גם אם היא כבר במרכז ההודעות
+  const notifId = 'yemot_sms_alert_' + Date.now();
+
+  chrome.notifications.create(notifId, {
+    type: 'basic',
+    iconUrl: 'icon128.png',
+    title: notifTitle,
+    message: notifMessage,
+    priority: 2
+  });
+
+  // העלמת ההודעה לאחר 25 שניות
+  setTimeout(() => {
+    chrome.notifications.clear(notifId);
+  }, 25000);
+}
+
 async function checkForNewSms() {
   return new Promise((resolve, reject) => {
     chrome.storage.local.get(['token', 'lastMessageId'], async (data) => {
@@ -88,6 +122,10 @@ async function checkForNewSms() {
 
         if (result && result.responseStatus === 'OK' && result.rows && result.rows.length > 0) {
           const latestMsg = result.rows[0];
+          
+          // מחיקת שורות ריקות: החלפת מעברי שורה כפולים או יותר במעבר שורה אחד
+          latestMsg.message = latestMsg.message.replace(/(\r?\n){2,}/g, '\n');
+
           const msgId = `${latestMsg.receive_date}_${latestMsg.source}`;
 
           if (!data.lastMessageId) {
@@ -102,16 +140,7 @@ async function checkForNewSms() {
               lastMessageText: latestMsg.message 
             });
 
-            const codeMatch = latestMsg.message.match(/\b\d{5,8}\b/);
-            const codeText = codeMatch ? `קוד אימות: ${codeMatch[0]}` : '';
-
-            chrome.notifications.create('yemot_sms_alert', {
-              type: 'basic',
-              iconUrl: 'icon48.png',
-              title: `הודעת SMS חדשה (${latestMsg.source || 'מערכת'})`,
-              message: `${latestMsg.message}\n${codeText}\n[לחץ כאן להעתקת הקוד]`,
-              priority: 2
-            });
+            showSmsNotification(latestMsg);
           }
         }
         resolve(true);
@@ -139,6 +168,10 @@ async function resendLatestSmsNotification() {
 
         if (result && result.responseStatus === 'OK' && result.rows && result.rows.length > 0) {
           const latestMsg = result.rows[0];
+          
+          // מחיקת שורות ריקות: החלפת מעברי שורה כפולים או יותר במעבר שורה אחד
+          latestMsg.message = latestMsg.message.replace(/(\r?\n){2,}/g, '\n');
+
           const msgId = `${latestMsg.receive_date}_${latestMsg.source}`;
 
           chrome.storage.local.set({ 
@@ -146,16 +179,7 @@ async function resendLatestSmsNotification() {
             lastMessageText: latestMsg.message 
           });
 
-          const codeMatch = latestMsg.message.match(/\b\d{5,8}\b/);
-          const codeText = codeMatch ? `קוד אימות: ${codeMatch[0]}` : '';
-
-          chrome.notifications.create('yemot_sms_alert', {
-            type: 'basic',
-            iconUrl: 'icon48.png',
-            title: `הודעת SMS אחרונה (${latestMsg.source || 'מערכת'})`,
-            message: `${latestMsg.message}\n${codeText}\n[לחץ כאן להעתקת הקוד]`,
-            priority: 2
-          });
+          showSmsNotification(latestMsg);
           resolve(true);
         } else {
           resolve(false);
@@ -205,13 +229,13 @@ async function copyTextToClipboard(text) {
 // האזנה ללחיצה על התראות הדחיפה
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   // אם הלחיצה היא על התראת אישור/שגיאה - מעלימים אותה ללא העתקה מחדש
-  if (notificationId !== 'yemot_sms_alert') {
+  if (!notificationId.startsWith('yemot_sms_alert')) {
     chrome.notifications.clear(notificationId);
     return;
   }
 
   // סגירת התראת ה-SMS הראשית
-  chrome.notifications.clear('yemot_sms_alert');
+  chrome.notifications.clear(notificationId);
 
   chrome.storage.local.get(['lastMessageText'], async (data) => {
     if (data.lastMessageText) {
