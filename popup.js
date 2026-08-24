@@ -75,10 +75,9 @@ async function fetchMessages() {
             let extractedCode = null;
 
             // מחיקת שורות ריקות (צמצום רצף מעברי שורה למעבר יחיד)
-            // חותך גם רווחים מיותרים בתחילת ובסוף ההודעה
             text = text.replace(/[\r\n]+/g, '\n').trim();
 
-            // 1. זיהוי קישורים רחב - תופס גם קישורים כמו bit.ly/xxx, ynet.co.il וכו'
+            // 1. זיהוי קישורים רחב
             const urlRegex = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{2,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/gi;
             const links = [];
             text = text.replace(urlRegex, (url) => {
@@ -93,12 +92,11 @@ async function fetchMessages() {
               return `<span class="highlight-code">${match}</span>`;
             });
 
-            // 3. החזרת הקישורים כאלמנטים לחיצים בצורה בטוחה
+            // 3. החזרת הקישורים כאלמנטים לחיצים
             text = text.replace(/__URL_(\d+)__/g, (match, index) => {
               const url = links[index];
               let cleanUrl = url.replace(/&amp;/g, '&');
               
-              // הוספת פרוטוקול במידה וחסר, הכרחי כדי שהדפדפן ידע לצאת מחוץ לתוסף
               let href = cleanUrl;
               if (!href.match(/^https?:\/\//i)) {
                 href = 'https://' + href;
