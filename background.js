@@ -109,7 +109,8 @@ function showSmsNotification(latestMsg) {
 
 async function checkForNewSms() {
   return new Promise((resolve, reject) => {
-    chrome.storage.local.get(['token', 'lastMessageId'], async (data) => {
+    // הוספת שליפת unreadCount כדי לעקוב אחרי כמות ההודעות שלא נקראו
+    chrome.storage.local.get(['token', 'lastMessageId', 'unreadCount'], async (data) => {
       if (!data.token) {
         resolve(false);
         return;
@@ -135,10 +136,17 @@ async function checkForNewSms() {
           }
 
           if (msgId !== data.lastMessageId) {
+            const newCount = (data.unreadCount || 0) + 1;
+            
             chrome.storage.local.set({ 
               lastMessageId: msgId, 
-              lastMessageText: latestMsg.message 
+              lastMessageText: latestMsg.message,
+              unreadCount: newCount
             });
+
+            // הצגת המספר על סמל התוסף
+            chrome.action.setBadgeText({ text: String(newCount) });
+            chrome.action.setBadgeBackgroundColor({ color: '#1e3a8a' }); // צבע הרקע של המספר בסגנון התוסף
 
             showSmsNotification(latestMsg);
           }
@@ -275,8 +283,9 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 });
 
 ensureAlarmExists();
+
 // ==========================================
-// --- בלוק חדש: מערכת בדיקת עדכונים מול גיטאהב ---
+// --- מערכת בדיקת עדכונים מול גיטאהב ---
 // ==========================================
 
 const GITHUB_MANIFEST_URL = 'https://raw.githubusercontent.com/Tzadikvtovlo/PushBox/main/manifest.json';
