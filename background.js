@@ -148,7 +148,7 @@ async function checkForNewSms() {
 
             // הצגת המספר על סמל התוסף
             chrome.action.setBadgeText({ text: String(newCount) });
-            chrome.action.setBadgeBackgroundColor({ color: '#1e3a8a' }); // צבע הרקע של המספר בסגנון התוסף
+            chrome.action.setBadgeBackgroundColor({ color: '#6b21a8' }); // צבע הרקע של המספר בסגנון התוסף
 
             showSmsNotification(latestMsg);
           }
