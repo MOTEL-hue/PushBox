@@ -47,6 +47,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     checkForNewSms();
+    // בדיקת עדכונים ברקע באופן שוטף יחד עם בדיקת ההודעות
+    checkForUpdates();
   }
 });
 
@@ -200,7 +202,7 @@ async function resendLatestSmsNotification() {
   });
 }
 
-// יצירת מסמך Offscreen והעברת הטקסט להעתקה (ללא שינוי הלוגיקה)
+// יצירת מסמך Offscreen והעברת הטקסט להעתקה
 async function copyTextToClipboard(text) {
   try {
     const existingContexts = await chrome.runtime.getContexts({
