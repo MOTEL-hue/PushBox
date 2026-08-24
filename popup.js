@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // איפוס המונה והסרת המספר מסמל התוסף בעת פתיחת הפופ-אפ
+  chrome.storage.local.set({ unreadCount: 0 });
+  chrome.action.setBadgeText({ text: '' });
+
   loadHeaderTitle();
   fetchMessages();
 
@@ -70,7 +74,7 @@ async function fetchMessages() {
             let text = escapeHtml(msg.message || '');
             let extractedCode = null;
 
-            // --- חדש: מחיקת שורות ריקות (צמצום רצף מעברי שורה למעבר יחיד) ---
+            // מחיקת שורות ריקות (צמצום רצף מעברי שורה למעבר יחיד)
             // חותך גם רווחים מיותרים בתחילת ובסוף ההודעה
             text = text.replace(/[\r\n]+/g, '\n').trim();
 
@@ -103,7 +107,7 @@ async function fetchMessages() {
               return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: bold; direction: ltr; display: inline-block;">${url}</a>`;
             });
 
-            // --- חדש: המרת מעברי השורה לתגיות HTML כדי שיוצגו בפופ-אפ ---
+            // המרת מעברי השורה לתגיות HTML כדי שיוצגו בפופ-אפ
             text = text.replace(/\n/g, '<br>');
 
             body.innerHTML = text;
@@ -155,7 +159,7 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// --- בלוק חדש: בדיקת עדכונים לתצוגת הבאנר ---
+// בדיקת עדכונים לתצוגת הבאנר
 document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.local.get(['updateAvailable', 'updateUrl'], (data) => {
     if (data.updateAvailable) {
