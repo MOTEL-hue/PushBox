@@ -1,7 +1,10 @@
 name: Create Release ZIP
 
 on:
-  workflow_dispatch: # מאפשר להפעיל את התהליך בלחיצת כפתור ידנית
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -14,10 +17,10 @@ jobs:
         run: zip -r project-release.zip . -x "*.git*"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          name: Release v${{ github.run_number }}
+          tag_name: "v1.0.${{ github.run_number }}"
+          name: "Release v1.0.${{ github.run_number }}"
           files: project-release.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
