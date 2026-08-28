@@ -47,12 +47,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     checkForNewSms();
-    // בדיקת עדכונים ברקע באופן שוטף יחד עם בדיקת ההודעות
     checkForUpdates();
   }
 });
 
-// האזנה לקריאות מהפופ-אפ ומההגדרות
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'check-now') {
     checkForNewSms().then((hasToken) => {
@@ -75,7 +73,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// פונקציית עזר להצגת ההתראה בהתאם ללוגיקה המבוקשת
 function showSmsNotification(latestMsg) {
   const codeMatch = latestMsg.message.match(/\b\d{5,8}\b/);
   const codeText = codeMatch ? codeMatch[0] : null;
@@ -92,7 +89,6 @@ function showSmsNotification(latestMsg) {
     notifMessage = latestMsg.message;
   }
 
-  // יצירת מזהה ייחודי כדי לאפשר שליחה מחדש של אותה הודעה גם אם היא כבר במרכז ההודעות
   const notifId = 'yemot_sms_alert_' + Date.now();
 
   chrome.notifications.create(notifId, {
@@ -100,19 +96,18 @@ function showSmsNotification(latestMsg) {
     iconUrl: 'icon128.png',
     title: notifTitle,
     message: notifMessage,
-    priority: 2
+    priority: 2,
+    requireInteraction: false
   });
 
-  // העלמת ההודעה לאחר 25 שניות
   setTimeout(() => {
     chrome.notifications.clear(notifId);
-  }, 25000);
+  }, 15000); 
 }
 
 async function checkForNewSms() {
   return new Promise((resolve, reject) => {
-    // הוספת שליפת unreadCount כדי לעקוב אחרי כמות ההודעות שלא נקראו
-    chrome.storage.local.get(['token', 'lastMessageId', 'unreadCount'], async (data) => {
+    chrome.storage.local.get(['token', 'lastMessageId', 'unreadCount', 'smsFilters'], async (data) => {
       if (!data.token) {
         resolve(false);
         return;
@@ -125,9 +120,15 @@ async function checkForNewSms() {
 
         if (result && result.responseStatus === 'OK' && result.rows && result.rows.length > 0) {
           const latestMsg = result.rows[0];
-          
-          // מחיקת שורות ריקות: החלפת מעברי שורה כפולים או יותר במעבר שורה אחד
           latestMsg.message = latestMsg.message.replace(/(\r?\n){2,}/g, '\n');
+
+          const filters = data.smsFilters || [];
+          let isFiltered = false;
+          for (let f of filters) {
+            if (f.type === 'sender' && latestMsg.source === f.value) isFiltered = true;
+            if (f.type === 'contains' && latestMsg.message.includes(f.value)) isFiltered = true;
+            if (f.type === 'not_contains' && !latestMsg.message.includes(f.value)) isFiltered = true;
+          }
 
           const msgId = `${latestMsg.receive_date}_${latestMsg.source}`;
 
@@ -138,19 +139,19 @@ async function checkForNewSms() {
           }
 
           if (msgId !== data.lastMessageId) {
-            const newCount = (data.unreadCount || 0) + 1;
-            
             chrome.storage.local.set({ 
               lastMessageId: msgId, 
               lastMessageText: latestMsg.message,
-              unreadCount: newCount
             });
 
-            // הצגת המספר על סמל התוסף
-            chrome.action.setBadgeText({ text: String(newCount) });
-            chrome.action.setBadgeBackgroundColor({ color: '#6b21a8' }); // צבע הרקע של המספר בסגנון התוסף
-
-            showSmsNotification(latestMsg);
+            if (!isFiltered) {
+              const newCount = (data.unreadCount || 0) + 1;
+              chrome.storage.local.set({ unreadCount: newCount });
+              chrome.action.setBadgeText({ text: String(newCount) });
+              chrome.action.setBadgeBackgroundColor({ color: '#6b21a8' });
+              
+              showSmsNotification(latestMsg);
+            }
           }
         }
         resolve(true);
@@ -162,7 +163,6 @@ async function checkForNewSms() {
   });
 }
 
-// שליחה מחדש של התראת דחיפה להודעה האחרונה במערכת
 async function resendLatestSmsNotification() {
   return new Promise((resolve, reject) => {
     chrome.storage.local.get(['token'], async (data) => {
@@ -178,12 +178,8 @@ async function resendLatestSmsNotification() {
 
         if (result && result.responseStatus === 'OK' && result.rows && result.rows.length > 0) {
           const latestMsg = result.rows[0];
-          
-          // מחיקת שורות ריקות: החלפת מעברי שורה כפולים או יותר במעבר שורה אחד
           latestMsg.message = latestMsg.message.replace(/(\r?\n){2,}/g, '\n');
-
           const msgId = `${latestMsg.receive_date}_${latestMsg.source}`;
-
           chrome.storage.local.set({ 
             lastMessageId: msgId, 
             lastMessageText: latestMsg.message 
@@ -202,7 +198,6 @@ async function resendLatestSmsNotification() {
   });
 }
 
-// יצירת מסמך Offscreen והעברת הטקסט להעתקה
 async function copyTextToClipboard(text) {
   try {
     const existingContexts = await chrome.runtime.getContexts({
@@ -236,15 +231,12 @@ async function copyTextToClipboard(text) {
   }
 }
 
-// האזנה ללחיצה על התראות הדחיפה
 chrome.notifications.onClicked.addListener(async (notificationId) => {
-  // אם הלחיצה היא על התראת אישור/שגיאה - מעלימים אותה ללא העתקה מחדש
   if (!notificationId.startsWith('yemot_sms_alert')) {
     chrome.notifications.clear(notificationId);
     return;
   }
 
-  // סגירת התראת ה-SMS הראשית
   chrome.notifications.clear(notificationId);
 
   chrome.storage.local.get(['lastMessageText'], async (data) => {
@@ -258,7 +250,7 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
           chrome.notifications.create('copy_success_' + Date.now(), {
             type: 'basic',
             iconUrl: 'icon48.png',
-            title: 'הקוד הועתק בהצלחה! ✓',
+            title: 'הקוד הועתק בהצלחה!',
             message: `קוד האימות (${code}) נמצא כעת בלוח ההדבקה.`,
             priority: 2
           });
@@ -285,10 +277,6 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 });
 
 ensureAlarmExists();
-
-// ==========================================
-// --- מערכת בדיקת עדכונים מול גיטאהב ---
-// ==========================================
 
 const GITHUB_MANIFEST_URL = 'https://raw.githubusercontent.com/Tzadikvtovlo/PushBox/main/manifest.json';
 const GITHUB_DOWNLOAD_URL = 'https://github.com/Tzadikvtovlo/PushBox/releases';
