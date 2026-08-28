@@ -118,7 +118,39 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.tabs.create({ url: 'filters.html' });
   });
 
-  // אימות טוקן
+  // פונקציה משותפת לאימות ושליפת מספר הטלפון
+  async function fetchAndSavePhoneNumber(token) {
+    try {
+      const res = await fetch(`https://www.call2all.co.il/ym/api/GetSession?token=${encodeURIComponent(token)}`);
+      const json = await res.json();
+      
+      // הדפסה לקונסול למטרות דיבאג - תוכל לראות שם אילו מפתחות בדיוק קיימים
+      console.log('API Response (GetSession):', json);
+      
+      if (json.responseStatus === 'OK') {
+         // הוספת המפתח username שהוא הנפוץ ביותר בימות המשיח לזיהוי מספר המערכת
+         const systemPhone = json.username || json.user_name || json.did || json.phoneNumber || json.customer_did || '';
+         
+         if (systemPhone) {
+           document.getElementById('phoneNumber').value = systemPhone;
+           chrome.storage.local.set({ phoneNumber: systemPhone });
+         } else {
+           document.getElementById('phoneNumber').value = "לא אותר מספר אוטומטית";
+           chrome.storage.local.set({ phoneNumber: "לא אותר מספר אוטומטית" });
+         }
+         return true;
+      }
+    } catch (e) {
+      console.error('Error fetching phone number:', e);
+    }
+    
+    // במקרה של שגיאה בטוקן או בחיבור לרשת
+    document.getElementById('phoneNumber').value = "שגיאה בשליפת המספר";
+    chrome.storage.local.set({ phoneNumber: "שגיאה בשליפת המספר" });
+    return false;
+  }
+
+  // אימות טוקן ושליפת מספר מערכת
   document.getElementById('verifyToken').addEventListener('click', async () => {
     const token = document.getElementById('token').value.trim();
     if (!token) {
@@ -128,28 +160,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showBtnFeedback('verifyToken', 'מאמת...', 'success');
     
-    try {
-      const res = await fetch(`https://www.call2all.co.il/ym/api/GetSession?token=${encodeURIComponent(token)}`);
-      const json = await res.json();
-      
-      if (json.responseStatus === 'OK') {
-         showBtnFeedback('verifyToken', 'אומת בהצלחה!', 'success');
-      } else {
-         showBtnFeedback('verifyToken', 'טוקן שגוי!', 'error');
-      }
-    } catch (e) {
-      showBtnFeedback('verifyToken', 'שגיאת רשת!', 'error');
+    const isValid = await fetchAndSavePhoneNumber(token);
+    if (isValid) {
+       showBtnFeedback('verifyToken', 'אומת בהצלחה!', 'success');
+    } else {
+       showBtnFeedback('verifyToken', 'טוקן שגוי!', 'error');
     }
   });
 
   // שמירה
-  document.getElementById('save').addEventListener('click', () => {
+  document.getElementById('save').addEventListener('click', async () => {
     const token = document.getElementById('token').value.trim();
     const interval = document.getElementById('interval').value;
     
-    chrome.storage.local.set({ token: token, interval: interval }, () => {
+    if (!token) {
+       showBtnFeedback('save', 'הזן טוקן!', 'error');
+       return;
+    }
+
+    // שמירת ההגדרות
+    chrome.storage.local.set({ token: token, interval: interval }, async () => {
        showBtnFeedback('save', 'נשמר בהצלחה!', 'success');
        chrome.runtime.sendMessage({ action: 'update-interval' });
+       
+       // הפעלת פונקציית שליפת המספר באופן אוטומטי גם בעת שמירה
+       await fetchAndSavePhoneNumber(token);
     });
   });
 
