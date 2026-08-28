@@ -1,174 +1,233 @@
+let currentSearchQuery = "";
+let currentFilters = [];
+let deletedMessages = [];
+let isTrashView = false;
+let allMessages = []; 
+let isAllCollapsed = false;
+
 document.addEventListener('DOMContentLoaded', () => {
-  // איפוס המונה והסרת המספר מסמל התוסף בעת פתיחת הפופ-אפ
-  chrome.storage.local.set({ unreadCount: 0 });
-  chrome.action.setBadgeText({ text: '' });
-
-  loadHeaderTitle();
-  fetchMessages();
-
-  const refreshBtn = document.getElementById('refreshBtn');
-  const refreshIcon = document.getElementById('refreshIcon');
-  
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', () => {
-      if (refreshIcon) refreshIcon.classList.add('spinning');
-      fetchMessages().finally(() => {
-        setTimeout(() => {
-          if (refreshIcon) refreshIcon.classList.remove('spinning');
-        }, 500);
-      });
-    });
-  }
-
-  const resendBtn = document.getElementById('resendBtn');
-  if (resendBtn) {
-    resendBtn.addEventListener('click', () => {
-      chrome.runtime.sendMessage({ action: 'resend-latest-sms' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error(chrome.runtime.lastError);
-        }
-      });
-    });
-  }
-});
-
-function loadHeaderTitle() {
   chrome.storage.local.get(['phoneNumber'], (data) => {
-    const titleEl = document.getElementById('systemPhone');
-    if (titleEl && data.phoneNumber) {
-      titleEl.textContent = data.phoneNumber;
+    if (data.phoneNumber && data.phoneNumber !== "לא אותר מספר אוטומטית" && data.phoneNumber !== "שגיאה בשליפת המספר") {
+      document.getElementById('systemPhone').textContent = data.phoneNumber;
     }
   });
-}
 
-async function fetchMessages() {
-  const listContainer = document.getElementById('messagesList');
-  
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    const icon = document.getElementById('refreshIcon');
+    icon.classList.add('spinning');
+    loadMessages().finally(() => setTimeout(() => icon.classList.remove('spinning'), 500));
+  });
+
+  document.getElementById('resendBtn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'resend-latest-sms' });
+  });
+
+  document.getElementById('trashBtn').addEventListener('click', () => {
+     isTrashView = !isTrashView;
+     const trashHeader = document.getElementById('trashHeader');
+     trashHeader.style.display = isTrashView ? 'flex' : 'none';
+     
+     const tBtn = document.getElementById('trashBtn');
+     tBtn.style.background = isTrashView ? '#f3e8ff' : '#ffffff';
+     tBtn.style.borderColor = isTrashView ? '#d8b4fe' : 'var(--border)';
+     tBtn.style.color = isTrashView ? 'var(--primary)' : 'var(--text-muted)';
+     
+     renderMessages();
+  });
+
+  document.getElementById('toggleAllBtn').addEventListener('click', () => {
+    isAllCollapsed = !isAllCollapsed;
+    const bodies = document.querySelectorAll('.msg-body');
+    const svgs = document.querySelectorAll('.collapse-btn svg');
+    
+    bodies.forEach(body => {
+      if (isAllCollapsed) {
+        body.classList.add('collapsed');
+      } else {
+        body.classList.remove('collapsed');
+      }
+    });
+    
+    svgs.forEach(svg => {
+      svg.style.transform = isAllCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
+    });
+  });
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    currentSearchQuery = e.target.value.toLowerCase();
+    renderMessages();
+  });
+
+  chrome.storage.local.get(['smsFilters', 'deletedMessages'], (data) => {
+    currentFilters = data.smsFilters || [];
+    deletedMessages = data.deletedMessages || [];
+    loadMessages();
+  });
+});
+
+async function loadMessages() {
   return new Promise((resolve) => {
     chrome.storage.local.get(['token'], async (data) => {
       if (!data.token) {
-        listContainer.innerHTML = `<div class="error">לא הוגדר טוקן. יש להגדיר טוקן במסך <a href="options.html" target="_blank">ההגדרות</a>.</div>`;
-        resolve();
-        return;
+         document.getElementById('messagesList').innerHTML = '<div class="error">לא הוגדר טוקן במערכת. לחץ על הגדרות.</div>';
+         resolve();
+         return;
       }
-
       try {
-        const url = `https://www.call2all.co.il/ym/api/GetIncomingSms?token=${encodeURIComponent(data.token)}&limit=10`;
+        const url = `https://www.call2all.co.il/ym/api/GetIncomingSms?token=${encodeURIComponent(data.token)}&limit=50`;
         const res = await fetch(url);
         const result = await res.json();
-
-        if (result && result.responseStatus === 'OK' && result.rows && result.rows.length > 0) {
-          listContainer.innerHTML = '';
-          result.rows.forEach(msg => {
-            const card = document.createElement('div');
-            card.className = 'msg-card';
-
-            const header = document.createElement('div');
-            header.className = 'msg-header';
-            header.innerHTML = `<span class="msg-source">מאת: ${escapeHtml(msg.source || 'לא ידוע')}</span><span class="msg-date">${escapeHtml(msg.receive_date || '')}</span>`;
-            card.appendChild(header);
-
-            const body = document.createElement('div');
-            body.className = 'msg-body';
-            
-            let text = escapeHtml(msg.message || '');
-            let extractedCode = null;
-
-            // מחיקת שורות ריקות (צמצום רצף מעברי שורה למעבר יחיד)
-            text = text.replace(/[\r\n]+/g, '\n').trim();
-
-            // 1. זיהוי קישורים רחב
-            const urlRegex = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{2,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/gi;
-            const links = [];
-            text = text.replace(urlRegex, (url) => {
-              links.push(url);
-              return `__URL_${links.length - 1}__`;
-            });
-
-            // 2. זיהוי קוד אימות
-            const codeRegex = /\b(\d{5,8})\b/g;
-            text = text.replace(codeRegex, (match) => {
-              if (!extractedCode) extractedCode = match;
-              return `<span class="highlight-code">${match}</span>`;
-            });
-
-            // 3. החזרת הקישורים כאלמנטים לחיצים
-            text = text.replace(/__URL_(\d+)__/g, (match, index) => {
-              const url = links[index];
-              let cleanUrl = url.replace(/&amp;/g, '&');
-              
-              let href = cleanUrl;
-              if (!href.match(/^https?:\/\//i)) {
-                href = 'https://' + href;
-              }
-              
-              return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: bold; direction: ltr; display: inline-block;">${url}</a>`;
-            });
-
-            // המרת מעברי השורה לתגיות HTML כדי שיוצגו בפופ-אפ
-            text = text.replace(/\n/g, '<br>');
-
-            body.innerHTML = text;
-            card.appendChild(body);
-
-            const copyBtn = document.createElement('button');
-            if (extractedCode) {
-              copyBtn.className = 'btn-copy';
-              copyBtn.textContent = `העתק קוד אימות (${extractedCode})`;
-              copyBtn.onclick = () => {
-                navigator.clipboard.writeText(extractedCode).then(() => {
-                  copyBtn.textContent = 'הקוד הועתק בהצלחה! ✓';
-                  setTimeout(() => copyBtn.textContent = `העתק קוד אימות (${extractedCode})`, 2000);
-                });
-              };
-            } else {
-              copyBtn.className = 'btn-copy secondary';
-              copyBtn.textContent = 'העתק הודעה מלאה';
-              copyBtn.onclick = () => {
-                navigator.clipboard.writeText(msg.message || '').then(() => {
-                  copyBtn.textContent = 'ההודעה הועתקה! ✓';
-                  setTimeout(() => copyBtn.textContent = 'העתק הודעה מלאה', 2000);
-                });
-              };
-            }
-            card.appendChild(copyBtn);
-
-            listContainer.appendChild(card);
-          });
+        
+        if (result && result.responseStatus === 'OK') {
+           allMessages = result.rows || [];
+           renderMessages();
         } else {
-          listContainer.innerHTML = `<div class="empty">אין הודעות להצגה או שהטוקן שגוי.</div>`;
+           document.getElementById('messagesList').innerHTML = '<div class="error">שגיאה במשיכת נתונים או טוקן שגוי.</div>';
         }
-      } catch (err) {
-        console.error(err);
-        listContainer.innerHTML = `<div class="error">שגיאה בתקשורת מול שרתי ימות המשיח.</div>`;
-      } finally {
-        resolve();
+      } catch (e) {
+        document.getElementById('messagesList').innerHTML = '<div class="error">שגיאת תקשורת מול השרת.</div>';
       }
+      resolve();
     });
   });
 }
 
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+function renderMessages() {
+  const container = document.getElementById('messagesList');
+  container.innerHTML = '';
 
-// בדיקת עדכונים לתצוגת הבאנר
-document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.local.get(['updateAvailable', 'updateUrl'], (data) => {
-    if (data.updateAvailable) {
-      const banner = document.getElementById('updateBanner');
-      const updateLink = document.getElementById('updateLink');
-      if (banner && updateLink) {
-        banner.style.display = 'block'; 
-        if (data.updateUrl) {
-          updateLink.href = data.updateUrl; 
-        }
+  let filteredMessages = allMessages.filter(msg => {
+    const msgId = `${msg.receive_date}_${msg.source}`;
+    const isDeleted = deletedMessages.includes(msgId);
+
+    // סינון מחזור
+    if (isTrashView) {
+      if (!isDeleted) return false;
+    } else {
+      if (isDeleted) return false;
+      
+      // סינון לפי הגדרות המסננים
+      for (let f of currentFilters) {
+        if (f.type === 'sender' && msg.source === f.value) return false;
+        if (f.type === 'contains' && msg.message.includes(f.value)) return false;
+        if (f.type === 'not_contains' && !msg.message.includes(f.value)) return false;
       }
     }
+    return true;
   });
-});
+
+  // סינון לפי חיפוש מלל חופשי
+  if (currentSearchQuery) {
+    filteredMessages = filteredMessages.filter(msg => 
+      msg.message.toLowerCase().includes(currentSearchQuery) || 
+      msg.source.toLowerCase().includes(currentSearchQuery)
+    );
+  }
+
+  if (filteredMessages.length === 0) {
+    if (isTrashView) {
+      container.innerHTML = '<div class="empty">סל המחזור ריק.</div>';
+    } else {
+      container.innerHTML = '<div class="empty">אין הודעות המותאמות לסינון/לחיפוש.</div>';
+    }
+    return;
+  }
+
+  filteredMessages.slice(0, 20).forEach(msg => {
+    const card = document.createElement('div');
+    card.className = 'msg-card';
+    const msgId = `${msg.receive_date}_${msg.source}`;
+    
+    const codeMatch = msg.message.match(/\b\d{5,8}\b/);
+    
+    // החלטה איזה טקסט יועתק (קוד או הודעה מלאה)
+    let copyBtnHtml = '';
+    if (codeMatch) {
+       copyBtnHtml = `
+       <button class="btn-copy">
+         <span class="copy-inner">
+           <svg class="svg-icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+           העתק קוד: <span class="code-highlight">${codeMatch[0]}</span>
+         </span>
+       </button>`;
+    } else {
+       copyBtnHtml = `
+       <button class="btn-copy">
+         <span class="copy-inner">
+           <svg class="svg-icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+           העתק הודעה מלאה
+         </span>
+       </button>`;
+    }
+
+    const displayMsg = msg.message.replace(/\n/g, '<br>');
+
+    // אייקון שחזור או מחיקה בהתאם למצב הנוכחי
+    const deleteRestoreIcon = isTrashView ? 
+      `<svg class="svg-icon" viewBox="0 0 24 24" title="שחזר הודעה"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>` : 
+      `<svg class="svg-icon" viewBox="0 0 24 24" title="מחק הודעה"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
+    // שימוש במחלקה collapsed אם נלחץ הכפתור הראשי
+    const bodyClass = isAllCollapsed ? "msg-body collapsed" : "msg-body";
+    const rotateStyle = isAllCollapsed ? "transform: rotate(180deg);" : "";
+
+    card.innerHTML = `
+      <div class="msg-header">
+        <div class="msg-source-wrapper"><span class="msg-source">${msg.source}</span></div>
+        <div class="msg-controls">
+          <button class="ctrl-btn filter-sender-btn" title="סנן שולח זה">
+            <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+          </button>
+          <button class="ctrl-btn collapse-btn" title="צמצם/הרחב">
+            <svg class="svg-icon" viewBox="0 0 24 24" style="${rotateStyle}"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <button class="ctrl-btn delete-btn">
+            ${deleteRestoreIcon}
+          </button>
+        </div>
+        <div class="msg-date-wrapper"><span class="msg-date">${msg.receive_date}</span></div>
+      </div>
+      <div class="${bodyClass}">${displayMsg}</div>
+      ${copyBtnHtml}
+    `;
+
+    // סינון שולח
+    card.querySelector('.filter-sender-btn').addEventListener('click', () => {
+      chrome.tabs.create({ url: `filters.html?sender=${encodeURIComponent(msg.source)}` });
+    });
+
+    // צמצום והרחבה פרטני
+    card.querySelector('.collapse-btn').addEventListener('click', () => {
+      const body = card.querySelector('.msg-body');
+      const svg = card.querySelector('.collapse-btn svg');
+      const isCollapsed = body.classList.toggle('collapsed');
+      svg.style.transform = isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
+    });
+
+    // מחיקה / שחזור למחזור
+    card.querySelector('.delete-btn').addEventListener('click', () => {
+      if (isTrashView) {
+        deletedMessages = deletedMessages.filter(id => id !== msgId);
+      } else {
+        if (!deletedMessages.includes(msgId)) {
+          deletedMessages.push(msgId);
+        }
+      }
+      chrome.storage.local.set({ deletedMessages: deletedMessages }, () => {
+        renderMessages();
+      });
+    });
+
+    // העתקת קוד / טקסט מלא
+    card.querySelector('.btn-copy').addEventListener('click', (e) => {
+       const textToCopy = codeMatch ? codeMatch[0] : msg.message;
+       navigator.clipboard.writeText(textToCopy);
+       const copyInner = e.currentTarget.querySelector('.copy-inner');
+       const originalHtml = copyInner.innerHTML;
+       copyInner.innerHTML = 'הועתק בהצלחה!';
+       setTimeout(() => copyInner.innerHTML = originalHtml, 1500);
+    });
+    
+    container.appendChild(card);
+  });
+}
