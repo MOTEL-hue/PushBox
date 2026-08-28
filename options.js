@@ -1,88 +1,169 @@
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.local.get(['token', 'checkInterval', 'phoneNumber'], (data) => {
+  // טעינת נתונים קיימים
+  chrome.storage.local.get(['token', 'phoneNumber', 'interval'], (data) => {
     if (data.token) document.getElementById('token').value = data.token;
-    if (data.checkInterval !== undefined) document.getElementById('interval').value = data.checkInterval;
     if (data.phoneNumber) document.getElementById('phoneNumber').value = data.phoneNumber;
+    if (data.interval) document.getElementById('interval').value = data.interval;
   });
 
-  document.getElementById('save').addEventListener('click', () => {
-    const token = document.getElementById('token').value.trim();
-    const interval = document.getElementById('interval').value;
-    const phoneNumber = document.getElementById('phoneNumber').value.trim();
+  // מנגנון בדיקת עדכונים
+  const versionBox = document.getElementById('versionBox');
+  const manifest = chrome.runtime.getManifest();
+  const currentVersion = manifest.version;
+  versionBox.textContent = `v${currentVersion}`;
+  versionBox.style.direction = 'ltr'; // הגדרה ראשונית כמספר
 
-    chrome.storage.local.set({ token, checkInterval: Number(interval), phoneNumber }, () => {
-      showStatus('ההגדרות נשמרו בהצלחה!', 'status-success');
-    });
+  // פונקציה חכמה להשוואת מספרי גרסאות מתמטית
+  function isNewerVersion(latest, current) {
+    const lParts = latest.split('.').map(Number);
+    const cParts = current.split('.').map(Number);
+    const len = Math.max(lParts.length, cParts.length);
+    
+    for (let i = 0; i < len; i++) {
+      const l = lParts[i] || 0; 
+      const c = cParts[i] || 0;
+      if (l > c) return true;
+      if (l < c) return false;
+    }
+    return false; 
+  }
+
+  async function checkForUpdates(isManual = false) {
+    if (isManual) {
+      versionBox.textContent = 'בודק...';
+      versionBox.style.direction = 'rtl'; // שינוי דינמי לעברית
+      versionBox.style.pointerEvents = 'none';
+    }
+    try {
+      const res = await fetch('https://api.github.com/repos/Tzadikvtovlo/PushBox/releases/latest');
+      if (!res.ok) throw new Error('Network error');
+      const data = await res.json();
+      
+      const latestVersion = data.tag_name ? data.tag_name.replace(/^v/i, '').trim() : currentVersion;
+
+      if (isNewerVersion(latestVersion, currentVersion)) {
+        versionBox.textContent = 'עדכון זמין!';
+        versionBox.style.direction = 'rtl'; // שינוי לעברית
+        versionBox.classList.add('update');
+        versionBox.onclick = () => window.open('https://github.com/Tzadikvtovlo/PushBox/releases', '_blank');
+        versionBox.style.pointerEvents = 'auto';
+      } else {
+        if (isManual) {
+          versionBox.textContent = 'מעודכן!';
+          versionBox.style.direction = 'rtl'; // שינוי לעברית
+          setTimeout(() => { 
+            versionBox.textContent = `v${currentVersion}`; 
+            versionBox.style.direction = 'ltr'; // חזרה למספר
+          }, 2000);
+        } else {
+          versionBox.textContent = `v${currentVersion}`;
+          versionBox.style.direction = 'ltr'; // חזרה למספר
+        }
+        versionBox.classList.remove('update');
+        versionBox.onclick = () => checkForUpdates(true);
+        versionBox.style.pointerEvents = 'auto';
+      }
+    } catch (e) {
+      if (isManual) {
+        versionBox.textContent = 'שגיאה בבדיקה!';
+        versionBox.style.direction = 'rtl'; // שינוי לעברית
+        setTimeout(() => { 
+          versionBox.textContent = `v${currentVersion}`; 
+          versionBox.style.direction = 'ltr'; // חזרה למספר
+        }, 2000);
+      }
+      versionBox.onclick = () => checkForUpdates(true);
+      versionBox.style.pointerEvents = 'auto';
+    }
+  }
+
+  // הפעלת בדיקה ראשונית בעת עליית הדף
+  checkForUpdates();
+
+  // פונקציה כללית לשינוי כפתור לסטטוס הצלחה/שגיאה
+  function showBtnFeedback(btnId, message, type = 'success') {
+    const btn = document.getElementById(btnId);
+    
+    if (!btn.dataset.originalHtml) {
+      btn.dataset.originalHtml = btn.innerHTML;
+    }
+    
+    const originalHtml = btn.dataset.originalHtml;
+    
+    btn.innerHTML = `<span style="font-weight: bold;">${message}</span>`;
+    
+    if (type === 'success') {
+      btn.style.backgroundColor = '#e9d5ff'; 
+      btn.style.color = '#1e3a8a';
+      btn.style.borderColor = '#c084fc';
+    } else {
+      btn.style.backgroundColor = '#f3e8ff'; 
+      btn.style.color = '#581c87'; 
+      btn.style.borderColor = '#d8b4fe';
+    }
+    
+    btn.style.pointerEvents = 'none';
+
+    setTimeout(() => {
+      btn.innerHTML = originalHtml;
+      btn.style.backgroundColor = '';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+      btn.style.pointerEvents = 'auto';
+    }, 2000);
+  }
+
+  // ניהול מסננים
+  document.getElementById('manageFilters').addEventListener('click', () => {
+    chrome.tabs.create({ url: 'filters.html' });
   });
 
-  // אימות טוקן בלייב מול השרת
+  // אימות טוקן
   document.getElementById('verifyToken').addEventListener('click', async () => {
     const token = document.getElementById('token').value.trim();
-    
     if (!token) {
-      showStatus('אנא הזן טוקן כדי לבדוק אותו', 'status-error');
+      showBtnFeedback('verifyToken', 'הזן טוקן!', 'error');
       return;
     }
 
-    showStatus('מאמת טוקן מול המערכת...', 'status-info');
+    showBtnFeedback('verifyToken', 'מאמת...', 'success');
     
     try {
-      const url = `https://www.call2all.co.il/ym/api/GetIncomingSms?token=${encodeURIComponent(token)}&limit=1`;
-      const res = await fetch(url);
-      const result = await res.json();
-
-      if (result && result.responseStatus === 'OK') {
-        showStatus('הטוקן תקין ומחובר למערכת! ✓', 'status-success');
+      const res = await fetch(`https://www.call2all.co.il/ym/api/GetSession?token=${encodeURIComponent(token)}`);
+      const json = await res.json();
+      
+      if (json.responseStatus === 'OK') {
+         showBtnFeedback('verifyToken', 'אומת בהצלחה!', 'success');
       } else {
-        showStatus('הטוקן שגוי או שאין הרשאות מתאימות', 'status-error');
+         showBtnFeedback('verifyToken', 'טוקן שגוי!', 'error');
       }
-    } catch (err) {
-      console.error(err);
-      showStatus('שגיאה בתקשורת מול השרת', 'status-error');
+    } catch (e) {
+      showBtnFeedback('verifyToken', 'שגיאת רשת!', 'error');
     }
   });
 
+  // שמירה
+  document.getElementById('save').addEventListener('click', () => {
+    const token = document.getElementById('token').value.trim();
+    const interval = document.getElementById('interval').value;
+    
+    chrome.storage.local.set({ token: token, interval: interval }, () => {
+       showBtnFeedback('save', 'נשמר בהצלחה!', 'success');
+       chrome.runtime.sendMessage({ action: 'update-interval' });
+    });
+  });
+
+  // שליחה מחדש
   document.getElementById('resendNow').addEventListener('click', () => {
-    showStatus('שולח התראה על ההודעה האחרונה...', 'status-info');
-    chrome.runtime.sendMessage({ action: 'resend-latest-sms' }, (response) => {
-      if (chrome.runtime.lastError) {
-        showStatus('שגיאה בשליחת ההתראה', 'status-error');
-      } else if (response && response.success) {
-        showStatus('התראה נשלחה בהצלחה!', 'status-success');
-      } else {
-        showStatus('לא נמצאה הודעה לשליחה או שהטוקן שגוי', 'status-error');
-      }
-    });
+     chrome.runtime.sendMessage({ action: 'resend-latest-sms' });
+     showBtnFeedback('resendNow', 'נשלח בהצלחה!', 'success');
   });
 
-  // העתקת המייל בקליק
-  document.getElementById('copyEmail').addEventListener('click', () => {
-    navigator.clipboard.writeText('q9411aa@gmail.com').then(() => {
-      showStatus('כתובת המייל הועתקה ללוח!', 'status-success');
-    });
-  });
-
-  // --- חדש: בדיקת עדכונים לתצוגת הבאנר ---
-  chrome.storage.local.get(['updateAvailable', 'updateUrl'], (data) => {
-    if (data.updateAvailable) {
-      const banner = document.getElementById('updateBanner');
-      const updateLink = document.getElementById('updateLink');
-      if (banner && updateLink) {
-        banner.style.display = 'block'; 
-        if (data.updateUrl) {
-          updateLink.href = data.updateUrl; 
-        }
-      }
-    }
+  // העתקת אימייל
+  document.getElementById('copyEmail').addEventListener('click', (e) => {
+     navigator.clipboard.writeText(e.target.innerText);
+     const originalText = e.target.innerText;
+     e.target.innerText = "הועתק!";
+     setTimeout(() => e.target.innerText = originalText, 1500);
   });
 });
-
-function showStatus(text, className) {
-  const status = document.getElementById('status');
-  status.textContent = text;
-  status.className = className;
-  setTimeout(() => {
-    status.textContent = '';
-    status.className = '';
-  }, 3500);
-}
