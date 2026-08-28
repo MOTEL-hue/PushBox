@@ -13,14 +13,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create ZIP archive
-        run: zip -r project-release.zip . -x "*.git*"
+      # קריאת מספר הגרסה מתוך manifest.json
+      - name: Extract version from manifest.json
+        id: get_version
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
+      # יצירת קובץ ZIP בשם הפרויקט
+      - name: Create ZIP archive
+        run: |
+          zip -r "${{ github.event.repository.name }}.zip" . -x "*.git*"
+
+      # יצירת ה-Release ב-GitHub
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v1.0.${{ github.run_number }}"
-          name: "Release v1.0.${{ github.run_number }}"
-          files: project-release.zip
+          tag_name: "v${{ steps.get_version.outputs.VERSION }}"
+          name: "Release v${{ steps.get_version.outputs.VERSION }}"
+          files: "${{ github.event.repository.name }}.zip"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
