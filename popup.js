@@ -160,7 +160,23 @@ function renderMessages() {
        </button>`;
     }
 
-    const displayMsg = msg.message.replace(/\n/g, '<br>');
+// זיהוי אגרסיבי וחכם של קישורים - תופס דומיינים גם אם הם מוקפים בתווים מוזרים כמו @
+    const urlRegex = /(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9][a-zA-Z0-9-]*\.(?:[a-zA-Z0-9-]+\.)*[a-zA-Z]{2,}(?:[\/?#][^\s]*)?/gi;
+    
+    const msgWithLinks = msg.message.replace(urlRegex, url => {
+      // ניקוי סימני פיסוק שעלולים להיצמד לקישור בטעות בסוף המשפט
+      let cleanUrl = url.replace(/[.,;!?]+$/, '');
+      
+      // יצירת כתובת תקינה לדפדפן: מוודא שיש קידומת http/https
+      let href = cleanUrl;
+      if (!href.match(/^https?:\/\//i)) {
+        href = 'http://' + href;
+      }
+      
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: bold;">${cleanUrl}</a>`;
+    });
+    
+    const displayMsg = msgWithLinks.replace(/\n/g, '<br>');
 
     // אייקון שחזור או מחיקה בהתאם למצב הנוכחי
     const deleteRestoreIcon = isTrashView ? 
