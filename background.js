@@ -4,10 +4,12 @@ const ALARM_NAME = 'checkYemotSmsAlarm';
 
 chrome.runtime.onInstalled.addListener(() => {
   initAlarmAndStorage();
+  checkForUpdates();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureAlarmExists();
+  checkForUpdates();
 });
 
 function initAlarmAndStorage() {
@@ -47,7 +49,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     checkForNewSms();
-    checkForUpdates();
+    // שימו לב: בדיקת עדכונים הוסרה מכאן כדי למנוע חסימה מה-API של גיטהאב עקב בדיקות מרובות. 
+    // הבדיקה תרוץ כעת רק בפתיחת דפדפן, קליק על הפופ-אפ, או בדף ההגדרות כפי שביקשתם.
   }
 });
 
@@ -276,26 +279,22 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   });
 });
 
-ensureAlarmExists();
-
-const GITHUB_MANIFEST_URL = 'https://raw.githubusercontent.com/Tzadikvtovlo/PushBox/main/manifest.json';
-const GITHUB_DOWNLOAD_URL = 'https://github.com/Tzadikvtovlo/PushBox/releases';
-
 async function checkForUpdates() {
   try {
-    const response = await fetch(`${GITHUB_MANIFEST_URL}?t=${Date.now()}`);
-    const remoteData = await response.json();
+    const response = await fetch('https://api.github.com/repos/Tzadikvtovlo/PushBox/releases/latest');
+    if (!response.ok) return;
+    const data = await response.json();
     
     const localVersion = chrome.runtime.getManifest().version;
-    const remoteVersion = remoteData.version;
+    const remoteVersion = data.tag_name ? data.tag_name.replace(/^v/i, '').trim() : localVersion;
 
     if (isNewerVersion(localVersion, remoteVersion)) {
-      chrome.storage.local.set({ 
-        updateAvailable: true, 
-        updateUrl: GITHUB_DOWNLOAD_URL 
-      });
+      chrome.storage.local.set({ updateAvailable: true });
+      chrome.action.setBadgeText({ text: "!" });
+      chrome.action.setBadgeBackgroundColor({ color: '#6b21a8' });
     } else {
       chrome.storage.local.set({ updateAvailable: false });
+      chrome.action.setBadgeText({ text: "" });
     }
   } catch (error) {
     console.error("PushBox Update Check Error:", error);
@@ -313,6 +312,3 @@ function isNewerVersion(local, remote) {
   }
   return false;
 }
-
-chrome.runtime.onStartup.addListener(checkForUpdates);
-chrome.runtime.onInstalled.addListener(checkForUpdates);
