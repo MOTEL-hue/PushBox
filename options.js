@@ -1,19 +1,16 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // טעינת נתונים קיימים
   chrome.storage.local.get(['token', 'phoneNumber', 'interval'], (data) => {
     if (data.token) document.getElementById('token').value = data.token;
     if (data.phoneNumber) document.getElementById('phoneNumber').value = data.phoneNumber;
     if (data.interval) document.getElementById('interval').value = data.interval;
   });
 
-  // מנגנון בדיקת עדכונים
   const versionBox = document.getElementById('versionBox');
   const manifest = chrome.runtime.getManifest();
   const currentVersion = manifest.version;
   versionBox.textContent = `v${currentVersion}`;
-  versionBox.style.direction = 'ltr'; // הגדרה ראשונית כמספר
+  versionBox.style.direction = 'ltr';
 
-  // פונקציה חכמה להשוואת מספרי גרסאות מתמטית
   function isNewerVersion(latest, current) {
     const lParts = latest.split('.').map(Number);
     const cParts = current.split('.').map(Number);
@@ -31,8 +28,9 @@ document.addEventListener('DOMContentLoaded', () => {
   async function checkForUpdates(isManual = false) {
     if (isManual) {
       versionBox.textContent = 'בודק...';
-      versionBox.style.direction = 'rtl'; // שינוי דינמי לעברית
+      versionBox.style.direction = 'rtl';
       versionBox.style.pointerEvents = 'none';
+      versionBox.title = 'בודק עדכונים...';
     }
     try {
       const res = await fetch('https://api.github.com/repos/Tzadikvtovlo/PushBox/releases/latest');
@@ -43,33 +41,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isNewerVersion(latestVersion, currentVersion)) {
         versionBox.textContent = 'עדכון זמין!';
-        versionBox.style.direction = 'rtl'; // שינוי לעברית
+        versionBox.title = 'לחץ כאן להורדה'; // עדכון הטולטיפ כשיש גרסה חדשה
+        versionBox.style.direction = 'rtl';
         versionBox.classList.add('update');
         versionBox.onclick = () => window.open('https://github.com/Tzadikvtovlo/PushBox/releases', '_blank');
         versionBox.style.pointerEvents = 'auto';
+        
+        // עדכון תגית הסמל בדפדפן
+        chrome.action.setBadgeText({ text: "!" });
+        chrome.action.setBadgeBackgroundColor({ color: '#6b21a8' });
       } else {
+        versionBox.title = 'לחץ לבדיקת עדכונים'; // החזרת הטולטיפ כשאין גרסה חדשה
         if (isManual) {
           versionBox.textContent = 'מעודכן!';
-          versionBox.style.direction = 'rtl'; // שינוי לעברית
+          versionBox.style.direction = 'rtl';
           setTimeout(() => { 
             versionBox.textContent = `v${currentVersion}`; 
-            versionBox.style.direction = 'ltr'; // חזרה למספר
+            versionBox.style.direction = 'ltr';
           }, 2000);
         } else {
           versionBox.textContent = `v${currentVersion}`;
-          versionBox.style.direction = 'ltr'; // חזרה למספר
+          versionBox.style.direction = 'ltr';
         }
         versionBox.classList.remove('update');
         versionBox.onclick = () => checkForUpdates(true);
         versionBox.style.pointerEvents = 'auto';
+        
+        // ניקוי התג אם אין עדכון
+        chrome.action.setBadgeText({ text: "" });
       }
     } catch (e) {
+      versionBox.title = 'לחץ לבדיקת עדכונים'; // החזרת הטולטיפ במקרה של שגיאה
       if (isManual) {
         versionBox.textContent = 'שגיאה בבדיקה!';
-        versionBox.style.direction = 'rtl'; // שינוי לעברית
+        versionBox.style.direction = 'rtl';
         setTimeout(() => { 
           versionBox.textContent = `v${currentVersion}`; 
-          versionBox.style.direction = 'ltr'; // חזרה למספר
+          versionBox.style.direction = 'ltr';
         }, 2000);
       }
       versionBox.onclick = () => checkForUpdates(true);
@@ -77,10 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // הפעלת בדיקה ראשונית בעת עליית הדף
   checkForUpdates();
 
-  // פונקציה כללית לשינוי כפתור לסטטוס הצלחה/שגיאה
   function showBtnFeedback(btnId, message, type = 'success') {
     const btn = document.getElementById(btnId);
     
@@ -113,22 +119,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2000);
   }
 
-  // ניהול מסננים
   document.getElementById('manageFilters').addEventListener('click', () => {
     chrome.tabs.create({ url: 'filters.html' });
   });
 
-  // פונקציה משותפת לאימות ושליפת מספר הטלפון
   async function fetchAndSavePhoneNumber(token) {
     try {
       const res = await fetch(`https://www.call2all.co.il/ym/api/GetSession?token=${encodeURIComponent(token)}`);
       const json = await res.json();
       
-      // הדפסה לקונסול למטרות דיבאג - תוכל לראות שם אילו מפתחות בדיוק קיימים
       console.log('API Response (GetSession):', json);
       
       if (json.responseStatus === 'OK') {
-         // הוספת המפתח username שהוא הנפוץ ביותר בימות המשיח לזיהוי מספר המערכת
          const systemPhone = json.username || json.user_name || json.did || json.phoneNumber || json.customer_did || '';
          
          if (systemPhone) {
@@ -144,13 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Error fetching phone number:', e);
     }
     
-    // במקרה של שגיאה בטוקן או בחיבור לרשת
     document.getElementById('phoneNumber').value = "שגיאה בשליפת המספר";
     chrome.storage.local.set({ phoneNumber: "שגיאה בשליפת המספר" });
     return false;
   }
 
-  // אימות טוקן ושליפת מספר מערכת
   document.getElementById('verifyToken').addEventListener('click', async () => {
     const token = document.getElementById('token').value.trim();
     if (!token) {
@@ -168,7 +168,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // שמירה
   document.getElementById('save').addEventListener('click', async () => {
     const token = document.getElementById('token').value.trim();
     const interval = document.getElementById('interval').value;
@@ -178,23 +177,19 @@ document.addEventListener('DOMContentLoaded', () => {
        return;
     }
 
-    // שמירת ההגדרות
     chrome.storage.local.set({ token: token, interval: interval }, async () => {
        showBtnFeedback('save', 'נשמר בהצלחה!', 'success');
        chrome.runtime.sendMessage({ action: 'update-interval' });
        
-       // הפעלת פונקציית שליפת המספר באופן אוטומטי גם בעת שמירה
        await fetchAndSavePhoneNumber(token);
     });
   });
 
-  // שליחה מחדש
   document.getElementById('resendNow').addEventListener('click', () => {
      chrome.runtime.sendMessage({ action: 'resend-latest-sms' });
      showBtnFeedback('resendNow', 'נשלח בהצלחה!', 'success');
   });
 
-  // העתקת אימייל
   document.getElementById('copyEmail').addEventListener('click', (e) => {
      navigator.clipboard.writeText(e.target.innerText);
      const originalText = e.target.innerText;
