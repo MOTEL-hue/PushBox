@@ -12,13 +12,57 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0 # חובה כדי להביא את ההיסטוריה (להודעת הקומיט) ואת כל התגיות (לבדיקת גרסאות קיימות)
 
-      # קריאת מספר הגרסה מתוך manifest.json
-      - name: Extract version from manifest.json
+      # חישוב הגרסה הסופית כולל בדיקת כפילויות והוספת תת-גרסה במידת הצורך
+      - name: Determine Release Version
         id: get_version
         run: |
-          VERSION=$(jq -r '.version' manifest.json)
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          BASE_VERSION=$(jq -r '.version' manifest.json)
+          echo "Base version from manifest: $BASE_VERSION"
+
+          # בדיקה אם התגית הבסיסית כבר קיימת
+          if git show-ref --tags "refs/tags/v$BASE_VERSION" --quiet; then
+            echo "Tag v$BASE_VERSION exists. Finding next available sub-version..."
+            
+            # חיפוש תגיות קיימות עם תת-גרסה (למשל v4.0.0.1, v4.0.0.2) והבאת הגבוהה ביותר
+            SAFE_BASE=$(echo "$BASE_VERSION" | sed 's/\./\\./g')
+            LATEST_SUB=$(git tag | grep -E "^v${SAFE_BASE}\.[0-9]+$" | sort -V | tail -n 1)
+
+            if [ -z "$LATEST_SUB" ]; then
+              # אם זו הפעם הראשונה שיש כפילות
+              FINAL_VERSION="${BASE_VERSION}.1"
+            else
+              # חילוץ המספר האחרון והגדלתו ב-1
+              SUB_NUM=$(echo "$LATEST_SUB" | awk -F. '{print $NF}')
+              NEXT_SUB=$((SUB_NUM + 1))
+              FINAL_VERSION="${BASE_VERSION}.${NEXT_SUB}"
+            fi
+          else
+            # הגרסה טרם קיימת במערכת
+            FINAL_VERSION="$BASE_VERSION"
+          fi
+
+          echo "FINAL_VERSION=$FINAL_VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved version: v$FINAL_VERSION"
+
+      # חילוץ הודעת הקומיט שבו שונה ה-manifest
+      - name: Extract Release Notes
+        id: get_notes
+        run: |
+          # שליפת הודעת הקומיט האחרונה שבה שונה הקובץ manifest.json
+          COMMIT_MSG=$(git log -1 --pretty=format:"%B" -- manifest.json)
+          
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG="עדכון גרסה חדשה" # טקסט ברירת מחדל למקרה שלא נמצא משהו
+          fi
+
+          # שימוש ב-EOF כדי לתמוך בהודעות קומיט מרובות שורות (Multi-line)
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "RELEASE_NOTES<<$EOF" >> $GITHUB_ENV
+          echo "$COMMIT_MSG" >> $GITHUB_ENV
+          echo "$EOF" >> $GITHUB_ENV
 
       # יצירת קובץ ZIP בשם הפרויקט
       - name: Create ZIP archive
@@ -29,8 +73,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2.1.0
         with:
-          tag_name: "v${{ steps.get_version.outputs.VERSION }}"
-          name: "Release v${{ steps.get_version.outputs.VERSION }}"
+          tag_name: "v${{ steps.get_version.outputs.FINAL_VERSION }}"
+          name: "Release v${{ steps.get_version.outputs.FINAL_VERSION }}"
+          body: "${{ env.RELEASE_NOTES }}" # שימוש בהודעת הקומיט שנשלפה
           files: "${{ github.event.repository.name }}.zip"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
