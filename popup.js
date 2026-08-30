@@ -6,8 +6,6 @@ let allMessages = [];
 let isAllCollapsed = false;
 
 document.addEventListener('DOMContentLoaded', () => {
-  checkUpdatePopup(); // בדיקת עדכון בפתיחת הפופאפ
-
   chrome.storage.local.get(['phoneNumber'], (data) => {
     if (data.phoneNumber && data.phoneNumber !== "לא אותר מספר אוטומטית" && data.phoneNumber !== "שגיאה בשליפת המספר") {
       document.getElementById('systemPhone').textContent = data.phoneNumber;
@@ -67,45 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-async function checkUpdatePopup() {
-  try {
-    const res = await fetch('https://api.github.com/repos/Tzadikvtovlo/PushBox/releases/latest');
-    if (res.ok) {
-      const data = await res.json();
-      const currentVersion = chrome.runtime.getManifest().version;
-      const latestVersion = data.tag_name ? data.tag_name.replace(/^v/i, '').trim() : currentVersion;
-      
-      const isNewer = (latest, current) => {
-        const lParts = latest.split('.').map(Number);
-        const cParts = current.split('.').map(Number);
-        for (let i = 0; i < Math.max(lParts.length, cParts.length); i++) {
-          const l = lParts[i] || 0, c = cParts[i] || 0;
-          if (l > c) return true;
-          if (l < c) return false;
-        }
-        return false;
-      };
-
-      if (isNewer(latestVersion, currentVersion)) {
-        chrome.action.setBadgeText({ text: "!" });
-        chrome.action.setBadgeBackgroundColor({ color: '#6b21a8' });
-        
-        const updateBox = document.getElementById('updateAlertBox');
-        if (updateBox) {
-          updateBox.style.display = 'block';
-          updateBox.onclick = () => window.open('https://github.com/Tzadikvtovlo/PushBox/releases', '_blank');
-        }
-      } else {
-        chrome.action.setBadgeText({ text: "" });
-        const updateBox = document.getElementById('updateAlertBox');
-        if (updateBox) updateBox.style.display = 'none';
-      }
-    }
-  } catch (e) {
-    console.error("Popup update check failed", e);
-  }
-}
-
 async function loadMessages() {
   return new Promise((resolve) => {
     chrome.storage.local.get(['token'], async (data) => {
@@ -141,11 +100,13 @@ function renderMessages() {
     const msgId = `${msg.receive_date}_${msg.source}`;
     const isDeleted = deletedMessages.includes(msgId);
 
+    // סינון מחזור
     if (isTrashView) {
       if (!isDeleted) return false;
     } else {
       if (isDeleted) return false;
       
+      // סינון לפי הגדרות המסננים
       for (let f of currentFilters) {
         if (f.type === 'sender' && msg.source === f.value) return false;
         if (f.type === 'contains' && msg.message.includes(f.value)) return false;
@@ -155,6 +116,7 @@ function renderMessages() {
     return true;
   });
 
+  // סינון לפי חיפוש מלל חופשי
   if (currentSearchQuery) {
     filteredMessages = filteredMessages.filter(msg => 
       msg.message.toLowerCase().includes(currentSearchQuery) || 
@@ -178,6 +140,7 @@ function renderMessages() {
     
     const codeMatch = msg.message.match(/\b\d{5,8}\b/);
     
+    // החלטה איזה טקסט יועתק (קוד או הודעה מלאה)
     let copyBtnHtml = '';
     if (codeMatch) {
        copyBtnHtml = `
@@ -197,18 +160,43 @@ function renderMessages() {
        </button>`;
     }
 
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const msgWithLinks = msg.message.replace(urlRegex, url => {
-      const cleanUrl = url.replace(/[.,;!?]$/, '');
-      return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: bold;">${cleanUrl}</a>`;
-    });
+    // זיהוי קישורים מתקדם (נלקח מקובץ 2)
+    let text = escapeHtml(msg.message || '');
     
-    const displayMsg = msgWithLinks.replace(/\n/g, '<br>');
+    // מחיקת שורות ריקות (צמצום רצף מעברי שורה למעבר יחיד)
+    text = text.replace(/[\r\n]+/g, '\n').trim();
 
+    // 1. זיהוי קישורים רחב באמצעות שומרי מקום (Placeholders)
+    const urlRegex = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{2,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/gi;
+    const links = [];
+    text = text.replace(urlRegex, (url) => {
+      links.push(url);
+      return `__URL_${links.length - 1}__`;
+    });
+
+    // 2. החזרת הקישורים כאלמנטים לחיצים בצורה בטוחה
+    text = text.replace(/__URL_(\d+)__/g, (match, index) => {
+      const url = links[index];
+      let cleanUrl = url.replace(/&amp;/g, '&');
+      
+      // הוספת פרוטוקול במידה וחסר
+      let href = cleanUrl;
+      if (!href.match(/^https?:\/\//i)) {
+        href = 'https://' + href;
+      }
+      
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: bold; direction: ltr; display: inline-block;">${url}</a>`;
+    });
+
+    // המרת מעברי השורה ל-HTML
+    const displayMsg = text.replace(/\n/g, '<br>');
+
+    // אייקון שחזור או מחיקה בהתאם למצב הנוכחי
     const deleteRestoreIcon = isTrashView ? 
       `<svg class="svg-icon" viewBox="0 0 24 24" title="שחזר הודעה"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>` : 
       `<svg class="svg-icon" viewBox="0 0 24 24" title="מחק הודעה"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
+    // שימוש במחלקה collapsed אם נלחץ הכפתור הראשי
     const bodyClass = isAllCollapsed ? "msg-body collapsed" : "msg-body";
     const rotateStyle = isAllCollapsed ? "transform: rotate(180deg);" : "";
 
@@ -232,10 +220,12 @@ function renderMessages() {
       ${copyBtnHtml}
     `;
 
+    // סינון שולח
     card.querySelector('.filter-sender-btn').addEventListener('click', () => {
       chrome.tabs.create({ url: `filters.html?sender=${encodeURIComponent(msg.source)}` });
     });
 
+    // צמצום והרחבה פרטני
     card.querySelector('.collapse-btn').addEventListener('click', () => {
       const body = card.querySelector('.msg-body');
       const svg = card.querySelector('.collapse-btn svg');
@@ -243,6 +233,7 @@ function renderMessages() {
       svg.style.transform = isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
     });
 
+    // מחיקה / שחזור למחזור
     card.querySelector('.delete-btn').addEventListener('click', () => {
       if (isTrashView) {
         deletedMessages = deletedMessages.filter(id => id !== msgId);
@@ -256,6 +247,7 @@ function renderMessages() {
       });
     });
 
+    // העתקת קוד / טקסט מלא
     card.querySelector('.btn-copy').addEventListener('click', (e) => {
        const textToCopy = codeMatch ? codeMatch[0] : msg.message;
        navigator.clipboard.writeText(textToCopy);
@@ -267,4 +259,14 @@ function renderMessages() {
     
     container.appendChild(card);
   });
+}
+
+// פונקציה הנלקחה מקובץ 2 כדי לאפשר עיבוד טקסט מאובטח לפני המרת הקישורים
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
