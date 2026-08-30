@@ -1,8 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.local.get(['token', 'phoneNumber', 'interval'], (data) => {
+  chrome.storage.local.get(['token', 'phoneNumber', 'interval', 'notificationStyle'], (data) => {
     if (data.token) document.getElementById('token').value = data.token;
     if (data.phoneNumber) document.getElementById('phoneNumber').value = data.phoneNumber;
-    if (data.interval) document.getElementById('interval').value = data.interval;
+    if (data.interval !== undefined) document.getElementById('interval').value = data.interval;
+    if (data.notificationStyle) {
+      document.getElementById('notificationStyle').value = data.notificationStyle;
+    } else {
+      document.getElementById('notificationStyle').value = 'both';
+    }
   });
 
   const versionBox = document.getElementById('versionBox');
@@ -40,18 +45,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const latestVersion = data.tag_name ? data.tag_name.replace(/^v/i, '').trim() : currentVersion;
 
       if (isNewerVersion(latestVersion, currentVersion)) {
+        chrome.storage.local.set({ updateAvailable: true });
         versionBox.textContent = 'עדכון זמין!';
-        versionBox.title = 'לחץ כאן להורדה'; // עדכון הטולטיפ כשיש גרסה חדשה
+        versionBox.title = 'לחץ כאן להורדה';
         versionBox.style.direction = 'rtl';
         versionBox.classList.add('update');
         versionBox.onclick = () => window.open('https://github.com/Tzadikvtovlo/PushBox/releases', '_blank');
         versionBox.style.pointerEvents = 'auto';
-        
-        // עדכון תגית הסמל בדפדפן
-        chrome.action.setBadgeText({ text: "!" });
-        chrome.action.setBadgeBackgroundColor({ color: '#6b21a8' });
       } else {
-        versionBox.title = 'לחץ לבדיקת עדכונים'; // החזרת הטולטיפ כשאין גרסה חדשה
+        chrome.storage.local.set({ updateAvailable: false });
+        versionBox.title = 'לחץ לבדיקת עדכונים';
         if (isManual) {
           versionBox.textContent = 'מעודכן!';
           versionBox.style.direction = 'rtl';
@@ -66,12 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
         versionBox.classList.remove('update');
         versionBox.onclick = () => checkForUpdates(true);
         versionBox.style.pointerEvents = 'auto';
-        
-        // ניקוי התג אם אין עדכון
-        chrome.action.setBadgeText({ text: "" });
       }
     } catch (e) {
-      versionBox.title = 'לחץ לבדיקת עדכונים'; // החזרת הטולטיפ במקרה של שגיאה
+      versionBox.title = 'לחץ לבדיקת עדכונים';
       if (isManual) {
         versionBox.textContent = 'שגיאה בבדיקה!';
         versionBox.style.direction = 'rtl';
@@ -135,10 +135,10 @@ document.addEventListener('DOMContentLoaded', () => {
          
          if (systemPhone) {
            document.getElementById('phoneNumber').value = systemPhone;
-           chrome.storage.local.set({ phoneNumber: systemPhone });
+           chrome.storage.local.set({ phoneNumber: systemPhone, connectionError: "" });
          } else {
            document.getElementById('phoneNumber').value = "לא אותר מספר אוטומטית";
-           chrome.storage.local.set({ phoneNumber: "לא אותר מספר אוטומטית" });
+           chrome.storage.local.set({ phoneNumber: "לא אותר מספר אוטומטית", connectionError: "" });
          }
          return true;
       }
@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     document.getElementById('phoneNumber').value = "שגיאה בשליפת המספר";
-    chrome.storage.local.set({ phoneNumber: "שגיאה בשליפת המספר" });
+    chrome.storage.local.set({ phoneNumber: "שגיאה בשליפת המספר", connectionError: "שגיאה באימות הטוקן" });
     return false;
   }
 
@@ -171,17 +171,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('save').addEventListener('click', async () => {
     const token = document.getElementById('token').value.trim();
     const interval = document.getElementById('interval').value;
+    const notificationStyle = document.getElementById('notificationStyle').value; 
     
     if (!token) {
        showBtnFeedback('save', 'הזן טוקן!', 'error');
        return;
     }
 
-    chrome.storage.local.set({ token: token, interval: interval }, async () => {
+    chrome.storage.local.set({ 
+      token: token, 
+      interval: interval, 
+      notificationStyle: notificationStyle 
+    }, async () => {
        showBtnFeedback('save', 'נשמר בהצלחה!', 'success');
-       chrome.runtime.sendMessage({ action: 'update-interval' });
        
-       await fetchAndSavePhoneNumber(token);
+       const isValid = await fetchAndSavePhoneNumber(token);
+       if (isValid) {
+         chrome.runtime.sendMessage({ action: 'check-now' });
+       }
     });
   });
 
