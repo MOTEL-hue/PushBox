@@ -46,45 +46,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isNewerVersion(latestVersion, currentVersion)) {
         chrome.storage.local.set({ updateAvailable: true });
-        versionBox.textContent = 'עדכון זמין!';
+        // שינוי הטקסט לתצוגה המפורטת כמו בתוסף 2
+        versionBox.textContent = `מותקן: v${currentVersion} | זמין: v${latestVersion}`;
         versionBox.title = 'לחץ כאן להורדה';
         versionBox.style.direction = 'rtl';
         versionBox.classList.add('update');
-        versionBox.onclick = () => window.open('https://github.com/Tzadikvtovlo/PushBox/releases', '_blank');
-        versionBox.style.pointerEvents = 'auto';
       } else {
         chrome.storage.local.set({ updateAvailable: false });
         versionBox.title = 'לחץ לבדיקת עדכונים';
+        versionBox.classList.remove('update');
+        
         if (isManual) {
-          versionBox.textContent = 'מעודכן!';
+          versionBox.textContent = 'אתה מעודכן';
           versionBox.style.direction = 'rtl';
           setTimeout(() => { 
             versionBox.textContent = `v${currentVersion}`; 
             versionBox.style.direction = 'ltr';
-          }, 2000);
+          }, 3000);
         } else {
           versionBox.textContent = `v${currentVersion}`;
           versionBox.style.direction = 'ltr';
         }
-        versionBox.classList.remove('update');
-        versionBox.onclick = () => checkForUpdates(true);
-        versionBox.style.pointerEvents = 'auto';
       }
     } catch (e) {
       versionBox.title = 'לחץ לבדיקת עדכונים';
       if (isManual) {
-        versionBox.textContent = 'שגיאה בבדיקה!';
+        versionBox.textContent = 'שגיאה בבדיקה';
         versionBox.style.direction = 'rtl';
         setTimeout(() => { 
           versionBox.textContent = `v${currentVersion}`; 
           versionBox.style.direction = 'ltr';
-        }, 2000);
+        }, 3000);
       }
-      versionBox.onclick = () => checkForUpdates(true);
+    } finally {
       versionBox.style.pointerEvents = 'auto';
     }
   }
 
+  // מנגנון חכם ללחיצה: אם יש עדכון פותח חלון, אם לא מריץ בדיקה
+  versionBox.onclick = () => {
+    if (versionBox.classList.contains('update')) {
+      window.open('https://github.com/Tzadikvtovlo/PushBox/releases', '_blank');
+    } else {
+      checkForUpdates(true);
+    }
+  };
+
+  // בדיקה אוטומטית בפתיחת הדף
   checkForUpdates();
 
   function showBtnFeedback(btnId, message, type = 'success') {
