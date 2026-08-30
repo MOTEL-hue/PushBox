@@ -9,11 +9,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // 7. בכל מקרה של פתיחת הפופ-אפ, נאפס את מספר ההודעות שלא נקראו
   chrome.storage.local.set({ unreadCount: 0 });
 
-  // 1. טיפול בבאנר של התרעה על עדכון זמין
+  // 1. טיפול בבאנר של התרעה על עדכון זמין (עם כיתוב חכם לפי גרסאות)
   chrome.storage.local.get(['updateAvailable'], (data) => {
     if (data.updateAvailable) {
       const alertBox = document.getElementById('updateAlertBox');
       alertBox.style.display = 'block';
+      
+      const currentVersion = chrome.runtime.getManifest().version;
+      
+      // משיכת הגרסה המעודכנת בזמן אמת והצגת הנתונים
+      fetch('https://api.github.com/repos/Tzadikvtovlo/PushBox/releases/latest')
+        .then(res => res.json())
+        .then(releaseData => {
+           const latestVersion = releaseData.tag_name ? releaseData.tag_name.replace(/^v/i, '').trim() : currentVersion;
+           alertBox.textContent = `יש עדכון! מותקן: v${currentVersion} | זמין: v${latestVersion}`;
+           alertBox.title = "לחץ כאן להורדה";
+        }).catch(() => {
+           // גיבוי במקרה של שגיאת רשת
+           alertBox.textContent = "עדכון גרסה זמין! לחץ כאן להורדה";
+        });
+
       alertBox.addEventListener('click', () => {
         window.open('https://github.com/Tzadikvtovlo/PushBox/releases', '_blank');
       });
