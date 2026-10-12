@@ -1,4 +1,16 @@
-console.log("=== Yemot Background Worker Loaded Successfully ===");
+console.log("=== שירות הרקע של פושבוקס הופעל ===");
+
+// יומן מקומי מצומצם: עד 30 שגיאות, ללא תוכן SMS או נתוני משתמש, ללא רשת.
+function recordLocalError(kind) {
+  const row = { time: new Date().toISOString(), type: String(kind || "שגיאה").slice(0, 80) };
+  chrome.storage.local.get({ bugLog: [] }, (data) => {
+    const log = Array.isArray(data.bugLog) ? data.bugLog : [];
+    log.push(row);
+    chrome.storage.local.set({ bugLog: log.slice(-30) });
+  });
+}
+self.addEventListener("error", () => recordLocalError("שגיאת שירות רקע"));
+self.addEventListener("unhandledrejection", () => recordLocalError("פעולה אסינכרונית נכשלה"));
 
 const ALARM_NAME = 'checkYemotSmsAlarm';
 
